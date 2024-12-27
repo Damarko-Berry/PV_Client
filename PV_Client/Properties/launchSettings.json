@@ -3,9 +3,6 @@
     "PV_Client": {
       "commandName": "Project"
     },
-    "Container (Dockerfile)": {
-      "commandName": "Docker"
-    },
     "WSL": {
       "commandName": "WSL2",
       "distributionName": ""

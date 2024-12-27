@@ -160,7 +160,7 @@ ST: urn:PseudoVision:device:MediaServer:1";
                 Mplayer.Kill();
             }
             state = ClientState.Watching;
-            string command = $"{ChannelName} -fs"; // Replace with your desired command
+            string command = $"{ChannelName} -fs";
             var escapedArgs = command.Replace("\"", "\\\"");
 
             Mplayer = new Process()
