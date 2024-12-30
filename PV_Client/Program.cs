@@ -8,6 +8,7 @@ using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
 
+
 namespace PV_Client
 {
     internal class Program
@@ -134,21 +135,31 @@ ST: urn:PseudoVision:device:MediaServer:1";
             {
                 UdpReceiveResult result = await client.ReceiveAsync();
                 string request = Encoding.UTF8.GetString(result.Buffer);
-
-                if (request.Contains("NOTIFY") && request.Contains("PseudoVision"))
+                if (request.Contains("NOTIFY"))
                 {
-                    string location = string.Empty;
-                    var req = request.Split("\n");
-                    for (int i = 0; i < req.Length; i++)
+                    if (request.Contains("urn:PseudoVision:schemas-upnp-org:MediaServer:1"))
                     {
-                        if (req[i].Contains("CHANNELS:"))
+                        string location = string.Empty;
+                        var req = request.Split("\n");
+                        for (int i = 0; i < req.Length; i++)
                         {
-                            location = req[i].Split(" ")[1].Trim();
-                            break;
+                            if (req[i].Contains("CHANNELS:"))
+                            {
+                                location = req[i].Split(" ")[1].Trim();
+                                break;
+                            }
                         }
+                        await ParseLocalServer(location);
+
                     }
-                    await ParseLocalServer(location);
-                    
+                    if (request.Contains("urn:PseudoVision:schemas-upnp-org:Controller:1"))
+                    {
+                        XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
+                        StringWriter sw = new StringWriter();
+                        xmlSerializer.Serialize(sw, ListOChans);
+                        byte[] responseData = Encoding.UTF8.GetBytes(sw.ToString());
+                        await client.SendAsync(responseData, responseData.Length, result.RemoteEndPoint);
+                    }
                 }
             }
         }
