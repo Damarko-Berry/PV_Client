@@ -10,6 +10,7 @@
   <ItemGroup>
     <Reference Include="PVLib">
       <HintPath>..\..\PseudoVision\PVLib\bin\Debug\net8.0\PVLib.dll</HintPath>
+      <HintPath>PVLib\PVLib.dll</HintPath>
     </Reference>
   </ItemGroup>
 

@@ -8,7 +8,6 @@ using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
 
-
 namespace PV_Client
 {
     internal class Program
@@ -18,7 +17,7 @@ namespace PV_Client
         static ChannelList OtherChannels = new ChannelList();
         static ChannelList ListOChans => LocalChannels + OtherChannels;
         static Guid UniqueID = Guid.NewGuid();
-        static Process Mplayer = new Process();
+        static Process VLC = new Process();
         public static string[] localServers = [];
         async static Task Main(string[] args)
         {
@@ -37,10 +36,31 @@ namespace PV_Client
             {
                 File.Create("lS");
             }
-            Task.Run(() => ListenForSsdpRequests());
-            Task.Run(() => SendSsdpAnnouncements());
+#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+            Task.Run(ListenForSsdpRequests);
+ // Because this call is not awaited, execution of the current method continues before the call is completed
+            Task.Run(SendSsdpAnnouncements);
             Start();
-            
+            #pragma warning restore CS4014
+            ListenForController();
+            //ProcessStartInfo startInfo = new ProcessStartInfo() { FileName = "/bin/bash", Arguments = "flatpak run net.sapples.LiveCaptions"}; 
+            //Process proc = new() { StartInfo = startInfo, };
+            //proc.Start();
+            //Process.Start("flatpak run net.sapples.LiveCaptions");
+            await CheckVLC();
+        }
+        static async Task CheckVLC(){
+            Process[] processes = Process.GetProcessesByName("vlc");
+            while(!(processes.Length==0&state == ClientState.Watching)){
+                await Task.Delay(1000*30);
+                processes = Process.GetProcessesByName("vlc");
+                Console.WriteLine($"{processes.Length} instance(s) of VLC running");
+            }
+            state = ClientState.ShuttingDown;
+            await Task.Delay(5000);
+        }
+        static async void ListenForController()
+        {
             TcpListener listener = new TcpListener(IPAddress.Any, 7894);
             listener.Start();
             while(state != ClientState.ShuttingDown)
@@ -48,7 +68,6 @@ namespace PV_Client
                 await GetInput(await listener.AcceptTcpClientAsync());
             }
         }
-
         static async Task GetInput(TcpClient client)
         {
             var stream = client.GetStream();
@@ -77,8 +96,13 @@ namespace PV_Client
                 string description = await response.Content.ReadAsStringAsync();
                 var sr = new XmlSerializer(typeof(ChannelList));
                 TextReader reader = new StringReader(description);
+
+#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.
                 ChannelList channelList = (ChannelList)sr.Deserialize(reader);
+#pragma warning restore CS8600 // Converting null literal or possible null value to non-nullable type.
+#pragma warning disable CS8604 // Possible null reference argument.
                 LocalChannels += channelList;
+#pragma warning restore CS8604 // Possible null reference argument.
                 AddTolS(localServer);
 
             }
@@ -114,7 +138,7 @@ ST: urn:PseudoVision:device:MediaServer:1";
             UdpClient client = new UdpClient();
             byte[] buffer = Encoding.UTF8.GetBytes(searchMessage);
 
-            while (true)
+            while (state != ClientState.ShuttingDown)
             {
                 Console.WriteLine("ssdp message sent");
                 client.Send(buffer, buffer.Length, endPoint);
@@ -131,7 +155,7 @@ ST: urn:PseudoVision:device:MediaServer:1";
             client.Client.Bind(localEndPoint);
             client.JoinMulticastGroup(IPAddress.Parse("239.255.255.250"));
 
-            while (true)
+            while (state != ClientState.ShuttingDown)
             {
                 UdpReceiveResult result = await client.ReceiveAsync();
                 string request = Encoding.UTF8.GetString(result.Buffer);
@@ -164,30 +188,38 @@ ST: urn:PseudoVision:device:MediaServer:1";
             }
         }
 
-        static async void Play(string ChannelName)
+
+        static void Play(string ChannelName)
         {
-            if(state == ClientState.Watching)
+            if (state == ClientState.Watching)
             {
-                Mplayer.Kill();
+                try
+                {
+                    VLC.Kill();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                }
             }
             state = ClientState.Watching;
-            string command = $"{ChannelName} -fs";
+            string command = $"-f -R {ChannelName}";
             var escapedArgs = command.Replace("\"", "\\\"");
 
-            Mplayer = new Process()
+            VLC = new Process()
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "/usr/bin/mplayer",
+                    FileName = "/usr/bin/vlc",
                     Arguments = $"{escapedArgs}",
                     RedirectStandardOutput = true,
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                }
+                },
             };
 
-            Mplayer.Start();
-            //Mplayer.WaitForExit();
+            VLC.Start();
+            
 
         }
         public static async void Start()
@@ -197,7 +229,6 @@ ST: urn:PseudoVision:device:MediaServer:1";
                 state = ClientState.Searching;
                 await Task.Delay(1000);
             }
-            state = ClientState.Watching;
             Play(ListOChans[0].Link);
         }
     }
