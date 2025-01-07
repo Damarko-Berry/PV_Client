@@ -18,7 +18,7 @@ namespace PV_Client
         static ChannelList ListOChans => LocalChannels + OtherChannels;
         static int CurrentChan = 0;
 
-        static Process VLC = new Process();
+        static Process VLC = null;
         static VLController controller = null;
         public static string[] localServers = [];
         async static Task Main(string[] args)
@@ -53,7 +53,10 @@ namespace PV_Client
             await CheckVLC();
         }
         static async Task CheckVLC(){
-            
+            while (VLC == null)
+            {
+
+            }
             while(!VLC.HasExited & state == ClientState.Watching){
                 await Task.Delay(1000*15);
             }
@@ -163,11 +166,18 @@ HOST: 239.255.255.250:1900
 MAN: ""ssdp:discover""
 MX: 3
 ST: {SSDPTemplates.ControllerSchema}";
+            string dlnaSearch = $@"M-SEARCH * HTTP/1.1
+HOST: 239.255.255.250:1900
+MAN: ""ssdp:discover""
+MX: 3
+ST: urn:schemas-upnp-org:service:ContentDirectory:1";
+
 
             IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse("239.255.255.250"), 1900);
             UdpClient client = new UdpClient();
             byte[] Sbuffer = Encoding.UTF8.GetBytes(serverSearch);
             byte[] Cbuffer = Encoding.UTF8.GetBytes(ControllerSearch);
+            byte[] Dbuffer = Encoding.UTF8.GetBytes(ControllerSearch);
 
             while (state != ClientState.ShuttingDown)
             {
@@ -175,6 +185,8 @@ ST: {SSDPTemplates.ControllerSchema}";
                 client.Send(Sbuffer, Sbuffer.Length, endPoint);
                 await Task.Delay(1000 * 3); // Send every 3 seconds
                 client.Send(Cbuffer, Cbuffer.Length, endPoint);
+                await Task.Delay(1000 * 3); // Send every 3 seconds
+                client.Send(Dbuffer, Dbuffer.Length, endPoint);
                 await Task.Delay(1000 * 3); // Send every 3 seconds
             }
         }
