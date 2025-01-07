@@ -16,8 +16,10 @@ namespace PV_Client
         static ChannelList LocalChannels = new ChannelList();
         static ChannelList OtherChannels = new ChannelList();
         static ChannelList ListOChans => LocalChannels + OtherChannels;
-        static Guid UniqueID = Guid.NewGuid();
+        static int CurrentChan = 0;
+
         static Process VLC = new Process();
+        static VLController controller = null;
         public static string[] localServers = [];
         async static Task Main(string[] args)
         {
@@ -47,14 +49,13 @@ namespace PV_Client
             //Process proc = new() { StartInfo = startInfo, };
             //proc.Start();
             //Process.Start("flatpak run net.sapples.LiveCaptions");
+            
             await CheckVLC();
         }
         static async Task CheckVLC(){
-            Process[] processes = Process.GetProcessesByName("vlc");
-            while(!(processes.Length==0&state == ClientState.Watching)){
-                await Task.Delay(1000*30);
-                processes = Process.GetProcessesByName("vlc");
-                Console.WriteLine($"{processes.Length} instance(s) of VLC running");
+            
+            while(!VLC.HasExited & state == ClientState.Watching){
+                await Task.Delay(1000*15);
             }
             state = ClientState.ShuttingDown;
             await Task.Delay(5000);
@@ -70,6 +71,7 @@ namespace PV_Client
         }
         static async Task GetInput(TcpClient client)
         {
+            if (controller == null) return;
             var stream = client.GetStream();
             byte[] buffer = new byte[client.ReceiveBufferSize];
 
@@ -81,12 +83,34 @@ namespace PV_Client
                 bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
                 sb.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
             } while (bytesRead == buffer.Length);
-
             var Req = sb.ToString();
             Console.WriteLine(Req);
+            client.Close();
+            try
+            {
+                controller.GetCommand(EnumTranslator<VLCCommand>.fromString(Req));
+            }
+            catch
+            {
+                if(Req== "NextChan")
+                {
+                    ChangeChannel(1);     
+                }
+                else if(Req=="PrevChan")
+                {
+                    ChangeChannel(-1);
+                }
+            }
             
         }
-
+        static void ChangeChannel(int mag)
+        {
+            if(ListOChans.Channels.Count <2) return;
+            CurrentChan += mag;
+            if (mag < 0) CurrentChan = ListOChans.length - 1;
+            if (mag >= ListOChans.length) CurrentChan = 0;
+            controller.ChangeMedia(ListOChans[CurrentChan].Link);
+        }
         static async Task ParseLocalServer(string localServer)
         {
             try
@@ -116,9 +140,10 @@ namespace PV_Client
 
         private static void AddTolS(string localServer)
         {
+            localServer = localServer.Trim();
             for (int i = 0; i < localServers.Length; i++)
             {
-                if (localServers[i] == localServer) return;
+                if (localServers[i].Contains(localServer)) return;
             }
             var LSLSLSL = File.ReadAllText("lS");
             LSLSLSL += $"\n{localServer}";
@@ -128,20 +153,28 @@ namespace PV_Client
 
         static async Task SendSsdpAnnouncements()
         {
-            string searchMessage = $@"M-SEARCH * HTTP/1.1
+            string serverSearch = $@"M-SEARCH * HTTP/1.1
 HOST: 239.255.255.250:1900
 MAN: ""ssdp:discover""
 MX: 3
-ST: urn:PseudoVision:device:MediaServer:1";
+ST: {SSDPTemplates.ServerSchema}";
+            string ControllerSearch = $@"M-SEARCH * HTTP/1.1
+HOST: 239.255.255.250:1900
+MAN: ""ssdp:discover""
+MX: 3
+ST: {SSDPTemplates.ControllerSchema}";
 
             IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse("239.255.255.250"), 1900);
             UdpClient client = new UdpClient();
-            byte[] buffer = Encoding.UTF8.GetBytes(searchMessage);
+            byte[] Sbuffer = Encoding.UTF8.GetBytes(serverSearch);
+            byte[] Cbuffer = Encoding.UTF8.GetBytes(ControllerSearch);
 
             while (state != ClientState.ShuttingDown)
             {
                 Console.WriteLine("ssdp message sent");
-                client.Send(buffer, buffer.Length, endPoint);
+                client.Send(Sbuffer, Sbuffer.Length, endPoint);
+                await Task.Delay(1000 * 3); // Send every 3 seconds
+                client.Send(Cbuffer, Cbuffer.Length, endPoint);
                 await Task.Delay(1000 * 3); // Send every 3 seconds
             }
         }
@@ -159,9 +192,9 @@ ST: urn:PseudoVision:device:MediaServer:1";
             {
                 UdpReceiveResult result = await client.ReceiveAsync();
                 string request = Encoding.UTF8.GetString(result.Buffer);
-                if (request.Contains("NOTIFY"))
+                if (request.Contains("NOTIFY")| request.Contains($"ST: {SSDPTemplates.ClientSchema}"))
                 {
-                    if (request.Contains("urn:PseudoVision:schemas-upnp-org:MediaServer:1"))
+                    if (request.Contains($"{SSDPTemplates.ServerSchema}"))
                     {
                         string location = string.Empty;
                         var req = request.Split("\n");
@@ -176,19 +209,36 @@ ST: urn:PseudoVision:device:MediaServer:1";
                         await ParseLocalServer(location);
 
                     }
-                    if (request.Contains("urn:PseudoVision:schemas-upnp-org:Controller:1"))
+                    if (request.Contains($"{SSDPTemplates.ControllerSchema}"))
                     {
                         XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
                         StringWriter sw = new StringWriter();
                         xmlSerializer.Serialize(sw, ListOChans);
-                        byte[] responseData = Encoding.UTF8.GetBytes(sw.ToString());
-                        await client.SendAsync(responseData, responseData.Length, result.RemoteEndPoint);
+
+                        string response = $"urn:PseudoVision:schemas-upnp-org:Client:1\n" +
+                            $"Location:\n" +
+                            "{GetIPAddress}:7894" +
+                            "\nChannels:\n" +
+                            "{sw}";
+                        var data = Encoding.UTF8.GetBytes(response);
+                        await client.SendAsync(data, data.Length, result.RemoteEndPoint);
                     }
                 }
             }
         }
 
-
+        static IPAddress GetIPAddress()
+        {
+            var host = Dns.GetHostEntry(Dns.GetHostName());
+            foreach (var ip in host.AddressList)
+            {
+                if (ip.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    return ip;
+                }
+            }
+            throw new Exception("Local IP Address Not Found!");
+        }
         static void Play(string ChannelName)
         {
             if (state == ClientState.Watching)
@@ -203,7 +253,7 @@ ST: urn:PseudoVision:device:MediaServer:1";
                 }
             }
             state = ClientState.Watching;
-            string command = $"-f -R {ChannelName}";
+            string command = $"-f -R {ChannelName} --extraintf rc --rc-host=localhost:12345";
             var escapedArgs = command.Replace("\"", "\\\"");
 
             VLC = new Process()
@@ -217,10 +267,8 @@ ST: urn:PseudoVision:device:MediaServer:1";
                     CreateNoWindow = true,
                 },
             };
-
             VLC.Start();
-            
-
+            controller = new();
         }
         public static async void Start()
         {

@@ -7,4 +7,14 @@ namespace PV_Client
         Searching,
         ShuttingDown
     }
+
+    enum VLCCommand
+    {
+        Play,
+        VolumeDown,
+        VolumeUp,
+        Status,
+        Quit,
+    }
+
 }
