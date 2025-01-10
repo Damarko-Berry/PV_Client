@@ -57,7 +57,9 @@ namespace PV_Client
             {
 
             }
-            while(!VLC.HasExited & state == ClientState.Watching){
+            await Task.Delay(10*1000);
+            controller = new();
+            while (!VLC.HasExited & state == ClientState.Watching){
                 await Task.Delay(1000*15);
             }
             state = ClientState.ShuttingDown;
@@ -152,6 +154,7 @@ namespace PV_Client
             LSLSLSL += $"\n{localServer}";
             LSLSLSL = LSLSLSL.Trim();
             File.WriteAllText("lS",LSLSLSL);
+            
         }
 
         static async Task SendSsdpAnnouncements()
@@ -280,7 +283,7 @@ ST: urn:schemas-upnp-org:service:ContentDirectory:1";
                 },
             };
             VLC.Start();
-            controller = new();
+            
         }
         public static async void Start()
         {

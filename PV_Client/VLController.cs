@@ -18,7 +18,7 @@ namespace PV_Client
         
         public VLController()
         {
-            tcpClient = new TcpClient(IPAddress.Loopback.ToString(), 12345);
+            tcpClient = new TcpClient(IPAddress.IPv6Loopback.ToString(), 12345);
             writer = new StreamWriter(tcpClient.GetStream());
             writer.AutoFlush= true;
             writer.WriteLine($"volume {Volume}");
