@@ -76,35 +76,41 @@ namespace PV_Client
         }
         static async Task GetInput(TcpClient client)
         {
-            if (controller == null) return;
-            var stream = client.GetStream();
-            byte[] buffer = new byte[client.ReceiveBufferSize];
-
-            var sb = new StringBuilder();
-
-            int bytesRead;
-            do
-            {
-                bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                sb.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
-            } while (bytesRead == buffer.Length);
-            var Req = sb.ToString();
-            Console.WriteLine(Req);
-            client.Close();
             try
             {
-                controller.GetCommand(EnumTranslator<VLCCommand>.fromString(Req));
+                if (controller == null) return;
+                var stream = client.GetStream();
+                byte[] buffer = new byte[client.ReceiveBufferSize];
+
+                var sb = new StringBuilder();
+
+                int bytesRead;
+                do
+                {
+                    bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+                    sb.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
+                } while (bytesRead == buffer.Length);
+                var Req = sb.ToString();
+                Console.WriteLine(Req);
+                try
+                {
+                    controller.GetCommand(EnumTranslator<VLCCommand>.fromString(Req));
+                }
+                catch
+                {
+                    if (Req == "NextChan")
+                    {
+                        ChangeChannel(1);
+                    }
+                    else if (Req == "PrevChan")
+                    {
+                        ChangeChannel(-1);
+                    }
+                }
             }
-            catch
+            catch (Exception e)
             {
-                if(Req== "NextChan")
-                {
-                    ChangeChannel(1);     
-                }
-                else if(Req=="PrevChan")
-                {
-                    ChangeChannel(-1);
-                }
+                Console.WriteLine(e.ToString());
             }
             
         }
@@ -180,7 +186,7 @@ ST: {SSDPTemplates.ControllerSchema}";
 
             while (state != ClientState.ShuttingDown)
             {
-                Console.WriteLine("ssdp message sent");
+                //Console.WriteLine("ssdp message sent");
                 client.Send(Sbuffer, Sbuffer.Length, endPoint);
                 await Task.Delay(1000 * 3); // Send every 3 seconds
                 client.Send(Cbuffer, Cbuffer.Length, endPoint);
