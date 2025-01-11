@@ -263,9 +263,9 @@ ST: {SSDPTemplates.ControllerSchema}";
                         StringWriter sw = new StringWriter();
                         xmlSerializer.Serialize(sw, ListOChans);
 
-                        string response = $"\n{SSDPTemplates.ClientSchema}\n" +
-                            $"Location:\n" +
-                            $"{GetIPAddress()}:{port}" +
+                        string response = "HTTP/1.1 200 OK\r\n" + 
+                            $"\n{SSDPTemplates.ClientSchema}\n" +
+                            $"Location: {GetIPAddress()}:{port}" +
                             $"UUID:: {UUID}" +
                             "\nChannels:\n" +
                             $"{sw}";
