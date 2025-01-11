@@ -273,12 +273,14 @@ ST: {SSDPTemplates.ControllerSchema}";
                     FileName = "/usr/bin/vlc",
                     Arguments = $"{escapedArgs}",
                     RedirectStandardOutput = true,
+                    RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true,
                 },
             };
             VLC.Start();
-            
+            VLC.BeginOutputReadLine();
+            VLC.BeginErrorReadLine();
         }
         public static async void Start()
         {
