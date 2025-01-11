@@ -40,15 +40,11 @@ namespace PV_Client
             }
 #pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
             Task.Run(ListenForSsdpRequests);
- // Because this call is not awaited, execution of the current method continues before the call is completed
             Task.Run(SendSsdpAnnouncements);
             Start();
             #pragma warning restore CS4014
             ListenForController();
-            //ProcessStartInfo startInfo = new ProcessStartInfo() { FileName = "/bin/bash", Arguments = "flatpak run net.sapples.LiveCaptions"}; 
-            //Process proc = new() { StartInfo = startInfo, };
-            //proc.Start();
-            //Process.Start("flatpak run net.sapples.LiveCaptions");
+
             
             await CheckVLC();
         }
@@ -160,7 +156,7 @@ namespace PV_Client
             LSLSLSL += $"\n{localServer}";
             LSLSLSL = LSLSLSL.Trim();
             File.WriteAllText("lS",LSLSLSL);
-            
+            localServers = File.ReadAllLines("lS");
         }
 
         static async Task SendSsdpAnnouncements()
@@ -222,6 +218,7 @@ ST: {SSDPTemplates.ControllerSchema}";
                                 break;
                             }
                         }
+                        if(!localServers.Contains(location))
                         await ParseLocalServer(location);
 
                     }
