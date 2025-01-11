@@ -257,6 +257,21 @@ ST: {SSDPTemplates.ControllerSchema}";
                         await ParseLocalServer(location);
 
                     }
+                    if (request.Contains($"{SSDPTemplates.ControllerSchema}"))
+                    {
+                        XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
+                        StringWriter sw = new StringWriter();
+                        xmlSerializer.Serialize(sw, ListOChans);
+
+                        string response = $"\n{SSDPTemplates.ClientSchema}\n" +
+                            $"Location:\n" +
+                            $"{GetIPAddress()}:{port}" +
+                            $"UUID:: {UUID}" +
+                            "\nChannels:\n" +
+                            $"{sw}";
+                        var data = Encoding.UTF8.GetBytes(response);
+                        await client.SendAsync(data, data.Length, result.RemoteEndPoint);
+                    }
 
                 }else if(request.Contains("M-SEARCH") & request.Contains($"ST: {SSDPTemplates.ClientSchema}"))
                 {
