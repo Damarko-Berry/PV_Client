@@ -12,6 +12,7 @@ namespace PV_Client
     {
         int Volume = 256;
         bool playing = true;
+        bool mute = false;
         TcpClient tcpClient = new TcpClient();
         StreamWriter writer;
         public VLController()
@@ -19,6 +20,7 @@ namespace PV_Client
             tcpClient = new TcpClient(IPAddress.IPv6Loopback.ToString(), 12345);
             writer = new StreamWriter(tcpClient.GetStream());
             writer.AutoFlush= true;
+            Volume = 256/2;
             writer.WriteLine($"volume {Volume}");
         }
         public void GetCommand(VLCCommand cmd)
@@ -47,6 +49,7 @@ namespace PV_Client
                     }
                     else
                     {
+
                         writer.WriteLine($"volume {Volume}");
                     }
                     break;
@@ -55,6 +58,9 @@ namespace PV_Client
                     break;
                 case VLCCommand.Quit:
                     writer.WriteLine("quit");
+                    break;
+                    case VLCCommand.Mute:
+                    Mute();
                     break;
             }
         }
@@ -76,6 +82,18 @@ namespace PV_Client
             else
             {
                 writer.WriteLine("pause");
+            }
+        }
+        void Mute()
+        {
+            mute = !mute;
+            if (mute)
+            {
+                writer.WriteLine("volume 0");
+            }
+            else
+            {
+                writer.WriteLine($"volume {Volume}");
             }
         }
     }

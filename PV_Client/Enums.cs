@@ -14,6 +14,7 @@ namespace PV_Client
         VolumeDown,
         VolumeUp,
         Status,
+        Mute,
         Quit,
     }
 
