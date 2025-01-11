@@ -40,7 +40,7 @@ namespace PV_Client
                     }
                     break;
                 case VLCCommand.VolumeUp:
-                    Volume = Volume - 26;
+                    Volume = Volume + 26;
                     if (Volume>512)
                     {
                         Volume = 512;
