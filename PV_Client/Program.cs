@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -17,14 +18,15 @@ namespace PV_Client
         static ChannelList OtherChannels = new ChannelList();
         static ChannelList ListOChans => LocalChannels + OtherChannels;
         static int CurrentChan = 0;
-
+        static int port = 7896;
         static Process VLC = null;
         static VLController controller = null;
         public static string[] localServers = [];
         async static Task Main(string[] args)
         {
             Console.WriteLine("Searching for home server");
-            
+            var oports = GetPorts();
+            port= oports[new Random().Next(oports.Length)];
             state = ClientState.Loading;
             if (File.Exists("lS"))
             {
@@ -48,6 +50,38 @@ namespace PV_Client
             
             await CheckVLC();
         }
+
+        static int[] GetPorts()
+        {
+            List<int> openPorts = new List<int>(); 
+            for (int port = 1; port <= 65535; port++)
+            { 
+                if (IsPortOpen(port))
+                { openPorts.Add(port);
+                } 
+            }
+            return openPorts.ToArray();
+        }
+        static bool IsPortOpen(int port)
+        {
+            bool isOpen = false;
+            try 
+            { 
+                TcpConnectionInformation[] tcpConnections = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpConnections(); 
+                foreach (var tcpConnection in tcpConnections) 
+                { 
+                    if (tcpConnection.LocalEndPoint.Port == port)
+                    { 
+                        isOpen = true; 
+                        break; 
+                    } 
+                } 
+            }
+            catch (Exception)
+            { 
+            } 
+            return isOpen; 
+        }
         static async Task CheckVLC(){
             while (VLC == null)
             {
@@ -63,7 +97,7 @@ namespace PV_Client
         }
         static async void ListenForController()
         {
-            TcpListener listener = new TcpListener(IPAddress.Any, 7894);
+            TcpListener listener = new TcpListener(IPAddress.Any, port);
             listener.Start();
             while(state != ClientState.ShuttingDown)
             {
@@ -194,6 +228,7 @@ ST: {SSDPTemplates.ControllerSchema}";
         static async Task ListenForSsdpRequests()
         {
             UdpClient client = new UdpClient();
+            string UUID = Guid.NewGuid().ToString();
             IPEndPoint localEndPoint = new IPEndPoint(IPAddress.Any, 1900);
             client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
             client.ExclusiveAddressUse = false;
@@ -204,7 +239,7 @@ ST: {SSDPTemplates.ControllerSchema}";
             {
                 UdpReceiveResult result = await client.ReceiveAsync();
                 string request = Encoding.UTF8.GetString(result.Buffer);
-                if (request.Contains("NOTIFY")| request.Contains($"ST: {SSDPTemplates.ClientSchema}"))
+                if (request.Contains("NOTIFY")& request.Contains($"ST: {SSDPTemplates.ClientSchema}"))
                 {
                     if (request.Contains($"{SSDPTemplates.ServerSchema}"))
                     {
@@ -222,17 +257,21 @@ ST: {SSDPTemplates.ControllerSchema}";
                         await ParseLocalServer(location);
 
                     }
+
+                }else if(request.Contains("M-SEARCH") & request.Contains($"ST: {SSDPTemplates.ClientSchema}"))
+                {
                     if (request.Contains($"{SSDPTemplates.ControllerSchema}"))
                     {
                         XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
                         StringWriter sw = new StringWriter();
                         xmlSerializer.Serialize(sw, ListOChans);
 
-                        string response = $"urn:PseudoVision:schemas-upnp-org:Client:1\n" +
+                        string response = $"\n{SSDPTemplates.ClientSchema}\n" +
                             $"Location:\n" +
-                            "{GetIPAddress}:7894" +
+                            $"{GetIPAddress()}:{port}" +
+                            $"UUID:: {UUID}" +
                             "\nChannels:\n" +
-                            "{sw}";
+                            $"{sw}";
                         var data = Encoding.UTF8.GetBytes(response);
                         await client.SendAsync(data, data.Length, result.RemoteEndPoint);
                     }
