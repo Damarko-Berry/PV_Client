@@ -260,8 +260,6 @@ ST: {SSDPTemplates.ControllerSchema}";
 
                 }else if(request.Contains("M-SEARCH") & request.Contains($"ST: {SSDPTemplates.ClientSchema}"))
                 {
-                    if (request.Contains($"{SSDPTemplates.ControllerSchema}"))
-                    {
                         XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
                         StringWriter sw = new StringWriter();
                         xmlSerializer.Serialize(sw, ListOChans);
@@ -274,7 +272,6 @@ ST: {SSDPTemplates.ControllerSchema}";
                             $"{sw}";
                         var data = Encoding.UTF8.GetBytes(response);
                         await client.SendAsync(data, data.Length, result.RemoteEndPoint);
-                    }
                 }
             }
         }
