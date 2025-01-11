@@ -283,7 +283,7 @@ ST: {SSDPTemplates.ControllerSchema}";
                                               "EXT:\r\n" +
                                               $"LOCATION: http://{GetIPAddress()}:{port}/description.xml\r\n" +
                                               "SERVER: Custom/1.0 UPnP/1.0 DLNADOC/1.50\r\n" +
-                                              "ST: upnp:rootdevice\r\n" +
+                                              $"ST: {SSDPTemplates.ControllerSchema}\r\n" +
                                               $"USN: uuid:{UUID}::{SSDPTemplates.ClientSchema}\r\n" +
                                               "\r\n";
                         var data = Encoding.UTF8.GetBytes(response);
@@ -301,7 +301,7 @@ ST: {SSDPTemplates.ControllerSchema}";
                                               "EXT:\r\n" +
                                               $"LOCATION: http://{GetIPAddress()}:{port}/description.xml\r\n" +
                                               "SERVER: Custom/1.0 UPnP/1.0 DLNADOC/1.50\r\n" +
-                                              "ST: upnp:rootdevice\r\n" +
+                                              $"ST: {SSDPTemplates.ControllerSchema}\r\n" +
                                               $"USN: uuid:{UUID}::{SSDPTemplates.ClientSchema}\r\n" +
                                               "\r\n";
                         var data = Encoding.UTF8.GetBytes(response);
