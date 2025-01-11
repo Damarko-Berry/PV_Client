@@ -8,6 +8,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace PV_Client
 {
@@ -108,7 +109,7 @@ namespace PV_Client
         {
             try
             {
-                if (controller == null) return;
+                
                 var stream = client.GetStream();
                 byte[] buffer = new byte[client.ReceiveBufferSize];
 
@@ -119,9 +120,25 @@ namespace PV_Client
                 {
                     bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
                     sb.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
+                    if (sb.ToString().StartsWith("GET /description.xml"))
+                    {
+                        XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
+                        StringWriter sw = new StringWriter();
+                        xmlSerializer.Serialize(sw, ListOChans);
+                        byte[] buff = Encoding.UTF8.GetBytes(sb.ToString());
+                        StreamWriter writer = new StreamWriter(stream) { AutoFlush = true };
+                        writer.WriteLine("HTTP/1.1 200 OK");
+                        writer.WriteLine($"Content-Type: {Text.Xml}");
+                        writer.WriteLine($"Content-Length: {buff.Length}");
+                        writer.WriteLine();
+                        writer.Flush();
+                        await stream.WriteAsync(buff);
+                        return;
+                    }
                 } while (bytesRead == buffer.Length);
                 var Req = sb.ToString();
                 Console.WriteLine(Req);
+                if (controller == null) return;
                 try
                 {
                     controller.GetCommand(EnumTranslator<VLCCommand>.fromString(Req));
@@ -144,6 +161,7 @@ namespace PV_Client
             }
             
         }
+        
         static void ChangeChannel(int mag)
         {
             if(ListOChans.Channels.Count <2) return;
@@ -259,32 +277,33 @@ ST: {SSDPTemplates.ControllerSchema}";
                     }
                     if (request.Contains($"{SSDPTemplates.ControllerSchema}"))
                     {
-                        XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
-                        StringWriter sw = new StringWriter();
-                        xmlSerializer.Serialize(sw, ListOChans);
-
-                        string response = "HTTP/1.1 200 OK\r\n" + 
-                            $"\n{SSDPTemplates.ClientSchema}\n" +
-                            $"Location: {GetIPAddress()}:{port}" +
-                            $"UUID:: {UUID}" +
-                            "\nChannels:\n" +
-                            $"{sw}";
+                        string response = $"HTTP/1.1 200 OK\r\n" +
+                                              "CACHE-CONTROL: max-age=1800\r\n" +
+                                              $"DATE: {DateTime.UtcNow.ToString("r")}\r\n" +
+                                              "EXT:\r\n" +
+                                              $"LOCATION: http://{GetIPAddress()}:{port}/description.xml\r\n" +
+                                              "SERVER: Custom/1.0 UPnP/1.0 DLNADOC/1.50\r\n" +
+                                              "ST: upnp:rootdevice\r\n" +
+                                              $"USN: uuid:{UUID}::{SSDPTemplates.ClientSchema}\r\n" +
+                                              "\r\n";
                         var data = Encoding.UTF8.GetBytes(response);
                         await client.SendAsync(data, data.Length, result.RemoteEndPoint);
                     }
 
-                }else if(request.Contains("M-SEARCH") & request.Contains($"ST: {SSDPTemplates.ClientSchema}"))
+                }
+                else if(request.Contains("M-SEARCH") & request.Contains($"ST: {SSDPTemplates.ClientSchema}"))
                 {
-                        XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
-                        StringWriter sw = new StringWriter();
-                        xmlSerializer.Serialize(sw, ListOChans);
+                        
 
-                        string response = $"\n{SSDPTemplates.ClientSchema}\n" +
-                            $"Location:\n" +
-                            $"{GetIPAddress()}:{port}" +
-                            $"UUID:: {UUID}" +
-                            "\nChannels:\n" +
-                            $"{sw}";
+                        string response = $"HTTP/1.1 200 OK\r\n" +
+                                              "CACHE-CONTROL: max-age=1800\r\n" +
+                                              $"DATE: {DateTime.UtcNow.ToString("r")}\r\n" +
+                                              "EXT:\r\n" +
+                                              $"LOCATION: http://{GetIPAddress()}:{port}/description.xml\r\n" +
+                                              "SERVER: Custom/1.0 UPnP/1.0 DLNADOC/1.50\r\n" +
+                                              "ST: upnp:rootdevice\r\n" +
+                                              $"USN: uuid:{UUID}::{SSDPTemplates.ClientSchema}\r\n" +
+                                              "\r\n";
                         var data = Encoding.UTF8.GetBytes(response);
                         await client.SendAsync(data, data.Length, result.RemoteEndPoint);
                 }
