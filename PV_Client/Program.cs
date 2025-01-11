@@ -169,18 +169,14 @@ HOST: 239.255.255.250:1900
 MAN: ""ssdp:discover""
 MX: 3
 ST: {SSDPTemplates.ControllerSchema}";
-            string dlnaSearch = $@"M-SEARCH * HTTP/1.1
-HOST: 239.255.255.250:1900
-MAN: ""ssdp:discover""
-MX: 3
-ST: urn:schemas-upnp-org:service:ContentDirectory:1";
+            
 
 
             IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse("239.255.255.250"), 1900);
             UdpClient client = new UdpClient();
             byte[] Sbuffer = Encoding.UTF8.GetBytes(serverSearch);
             byte[] Cbuffer = Encoding.UTF8.GetBytes(ControllerSearch);
-            byte[] Dbuffer = Encoding.UTF8.GetBytes(ControllerSearch);
+            
 
             while (state != ClientState.ShuttingDown)
             {
@@ -189,8 +185,7 @@ ST: urn:schemas-upnp-org:service:ContentDirectory:1";
                 await Task.Delay(1000 * 3); // Send every 3 seconds
                 client.Send(Cbuffer, Cbuffer.Length, endPoint);
                 await Task.Delay(1000 * 3); // Send every 3 seconds
-                client.Send(Dbuffer, Dbuffer.Length, endPoint);
-                await Task.Delay(1000 * 3); // Send every 3 seconds
+                
             }
         }
 
@@ -268,7 +263,7 @@ ST: urn:schemas-upnp-org:service:ContentDirectory:1";
                 }
             }
             state = ClientState.Watching;
-            string command = $"-f -R {ChannelName} --extraintf rc --rc-host=localhost:12345";
+            string command = $"-f -L {ChannelName} --extraintf rc --rc-host=localhost:12345";
             var escapedArgs = command.Replace("\"", "\\\"");
 
             VLC = new Process()

@@ -12,10 +12,8 @@ namespace PV_Client
     {
         int Volume = 256;
         bool playing = true;
-
         TcpClient tcpClient = new TcpClient();
         StreamWriter writer;
-        
         public VLController()
         {
             tcpClient = new TcpClient(IPAddress.IPv6Loopback.ToString(), 12345);
@@ -23,7 +21,6 @@ namespace PV_Client
             writer.AutoFlush= true;
             writer.WriteLine($"volume {Volume}");
         }
-
         public void GetCommand(VLCCommand cmd)
         {
             switch (cmd)
@@ -69,7 +66,6 @@ namespace PV_Client
             writer.WriteLine("play");
             playing = true;
         }
-
         void Play()
         {
             playing =! playing;
