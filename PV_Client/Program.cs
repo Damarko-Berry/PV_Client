@@ -25,8 +25,8 @@ namespace PV_Client
         async static Task Main(string[] args)
         {
             Console.WriteLine("Searching for home server");
-            var oports = GetPorts();
-            port= oports[new Random().Next(oports.Length)];
+            //var oports = GetPorts();
+            //port= oports[new Random().Next(oports.Length)];
             state = ClientState.Loading;
             if (File.Exists("lS"))
             {
