@@ -136,7 +136,7 @@ namespace PV_Client
                         writer.WriteLine();
                         writer.Flush();
                         await stream.WriteAsync(ResponseBody,0,ResponseBody.Length);
-                        stream.Close();
+
                         return;
                     }
                 } while (bytesRead == buffer.Length);
