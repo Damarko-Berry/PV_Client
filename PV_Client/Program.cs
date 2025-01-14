@@ -128,14 +128,16 @@ namespace PV_Client
                         XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
                         StringWriter sw = new StringWriter();
                         xmlSerializer.Serialize(sw, ListOChans);
-                        byte[] ResponseBody = Encoding.UTF8.GetBytes(sb.ToString());
+                        var s = sw.ToString();
+                        byte[] ResponseBody = Encoding.UTF8.GetBytes(s);
                         StreamWriter writer = new StreamWriter(stream) { AutoFlush = true };
+                        string Header = "";
                         writer.WriteLine("HTTP/1.1 200 OK");
                         writer.WriteLine($"Content-Type: application/xml");
                         writer.WriteLine($"Content-Length: {ResponseBody.Length}");
-                        writer.WriteLine($"Content: {sw}");
+                        writer.WriteLine();
                         writer.Flush();
-                        //await stream.WriteAsync(ResponseBody,0,ResponseBody.Length);
+                        await stream.WriteAsync(ResponseBody,0,ResponseBody.Length);
                         stream.Close();
                         return;
                     }
