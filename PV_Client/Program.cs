@@ -22,6 +22,8 @@ namespace PV_Client
         static int port = 7896;
         static Process VLC = null;
         static VLController controller = null;
+        static string UUID = Guid.NewGuid().ToString();
+        
         public static string[] localServers = [];
         async static Task Main(string[] args)
         {
@@ -218,18 +220,19 @@ HOST: 239.255.255.250:1900
 MAN: ""ssdp:discover""
 MX: 3
 ST: {SSDPTemplates.ServerSchema}";
-            string ControllerSearch = $@"M-SEARCH * HTTP/1.1
-HOST: 239.255.255.250:1900
-MAN: ""ssdp:discover""
-MX: 3
-ST: {SSDPTemplates.ControllerSchema}";
-            
-
-
+            string ClientNotify =   "NOTIFY * HTTP/1.1\r\n" +
+                                    "HOST: 239.255.255.250:1900\r\n" +
+                                    "CACHE-CONTROL: max-age=1800\r\n" +
+                                    $"LOCATION: http://{GetIPAddress()}:{port}/description.xml\r\n" +
+                                    $"NT: {SSDPTemplates.ClientSchema}\r\n" +
+                                    "NTS: ssdp:alive\r\n" +
+                                    "SERVER: Custom/1.0 UPnP/1.0 DLNADOC/1.50\r\n" +
+                                    $"USN: uuid:{UUID}::{SSDPTemplates.ClientSchema}\r\n" +
+                                    "\r\n";
             IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse("239.255.255.250"), 1900);
             UdpClient client = new UdpClient();
             byte[] Sbuffer = Encoding.UTF8.GetBytes(serverSearch);
-            byte[] Cbuffer = Encoding.UTF8.GetBytes(ControllerSearch);
+            byte[] Cbuffer = Encoding.UTF8.GetBytes(ClientNotify);
             
 
             while (state != ClientState.ShuttingDown)
@@ -246,7 +249,6 @@ ST: {SSDPTemplates.ControllerSchema}";
         static async Task ListenForSsdpRequests()
         {
             UdpClient client = new UdpClient();
-            string UUID = Guid.NewGuid().ToString();
             IPEndPoint localEndPoint = new IPEndPoint(IPAddress.Any, 1900);
             client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
             client.ExclusiveAddressUse = false;
@@ -257,9 +259,9 @@ ST: {SSDPTemplates.ControllerSchema}";
             {
                 UdpReceiveResult result = await client.ReceiveAsync();
                 string request = Encoding.UTF8.GetString(result.Buffer);
-                if (request.Contains("NOTIFY")& request.Contains($"ST: {SSDPTemplates.ClientSchema}"))
+                if (request.Contains("NOTIFY") | request.Contains($"HTTP/1.1 200 OK"))
                 {
-                    if (request.Contains($"{SSDPTemplates.ServerSchema}"))
+                    if (request.Contains(SSDPTemplates.ServerSchema))
                     {
                         string location = string.Empty;
                         var req = request.Split("\n");
@@ -273,28 +275,11 @@ ST: {SSDPTemplates.ControllerSchema}";
                         }
                         if(!localServers.Contains(location))
                         await ParseLocalServer(location);
-
-                    }
-                    if (request.Contains($"{SSDPTemplates.ControllerSchema}"))
-                    {
-                        string response = $"HTTP/1.1 200 OK\r\n" +
-                                              "CACHE-CONTROL: max-age=1800\r\n" +
-                                              $"DATE: {DateTime.UtcNow.ToString("r")}\r\n" +
-                                              "EXT:\r\n" +
-                                              $"LOCATION: http://{GetIPAddress()}:{port}/description.xml\r\n" +
-                                              "SERVER: Custom/1.0 UPnP/1.0 DLNADOC/1.50\r\n" +
-                                              $"ST: {SSDPTemplates.ControllerSchema}\r\n" +
-                                              $"USN: uuid:{UUID}::{SSDPTemplates.ClientSchema}\r\n" +
-                                              "\r\n";
-                        var data = Encoding.UTF8.GetBytes(response);
-                        await client.SendAsync(data, data.Length, result.RemoteEndPoint);
                     }
 
                 }
                 else if(request.Contains("M-SEARCH") & request.Contains($"ST: {SSDPTemplates.ClientSchema}"))
                 {
-                        
-
                         string response = $"HTTP/1.1 200 OK\r\n" +
                                               "CACHE-CONTROL: max-age=1800\r\n" +
                                               $"DATE: {DateTime.UtcNow.ToString("r")}\r\n" +
