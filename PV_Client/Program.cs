@@ -130,13 +130,13 @@ namespace PV_Client
                         xmlSerializer.Serialize(sw, ListOChans);
                         byte[] ResponseBody = Encoding.UTF8.GetBytes(sb.ToString());
                         StreamWriter writer = new StreamWriter(stream) { AutoFlush = true };
-                        writer.WriteLine("HTTP/1.1 200 OK");
-                        writer.WriteLine($"Content-Type: application/xml");
-                        writer.WriteLine($"Content-Length: {ResponseBody.Length}");
-                        writer.WriteLine();
+                        //writer.WriteLine("HTTP/1.1 200 OK");
+                        //writer.WriteLine($"Content-Type: application/xml");
+                        //writer.WriteLine($"Content-Length: {ResponseBody.Length}");
+                        writer.WriteLine(sw.ToString());
                         writer.Flush();
-                        await stream.WriteAsync(ResponseBody,0,ResponseBody.Length);
-
+                        //await stream.WriteAsync(ResponseBody,0,ResponseBody.Length);
+                        stream.Close();
                         return;
                     }
                 } while (bytesRead == buffer.Length);
