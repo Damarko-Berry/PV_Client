@@ -300,7 +300,7 @@ ST: {SSDPTemplates.ServerSchema}";
             var host = Dns.GetHostEntry(Dns.GetHostName());
             foreach (var ip in host.AddressList)
             {
-                if (ip.AddressFamily == AddressFamily.InterNetwork)
+                if (ip.AddressFamily == AddressFamily.InterNetwork & !ip.ToString().Contains("127"))
                 {
                     return ip;
                 }
