@@ -122,6 +122,7 @@ namespace PV_Client
                 {
                     bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
                     sb.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
+                    Console.WriteLine(sb.ToString());
                     if (sb.ToString().StartsWith("GET /description.xml"))
                     {
                         XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
@@ -135,6 +136,7 @@ namespace PV_Client
                         writer.WriteLine();
                         writer.Flush();
                         await stream.WriteAsync(buff);
+                        stream.Close();
                         return;
                     }
                 } while (bytesRead == buffer.Length);
