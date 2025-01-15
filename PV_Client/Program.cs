@@ -152,7 +152,7 @@ namespace PV_Client
                     }
                     else
                     {
-                        var Req = sb.ToString();
+                        var Req = sb.ToString().Trim();
                         Console.WriteLine(Req);
                         if (controller != null)
                         {
