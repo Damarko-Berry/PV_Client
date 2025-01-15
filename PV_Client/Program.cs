@@ -190,8 +190,8 @@ namespace PV_Client
         {
             if(ListOChans.Channels.Count <2) return;
             CurrentChan += mag;
-            if (mag < 0) CurrentChan = ListOChans.length - 1;
-            if (mag >= ListOChans.length) CurrentChan = 0;
+            if (CurrentChan < 0) CurrentChan = ListOChans.length - 1;
+            if (CurrentChan >= ListOChans.length) CurrentChan = 0;
             controller.ChangeMedia(ListOChans[CurrentChan].Link);
         }
         static async Task ParseLocalServer(string localServer)
