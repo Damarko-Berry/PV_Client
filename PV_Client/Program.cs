@@ -142,7 +142,7 @@ namespace PV_Client
                         return;
                     }
                 } while (bytesRead == buffer.Length);
-                var Req = sb.ToString();
+                var Req = sb.ToString().Split("\r\n")[0].Trim();
                 Console.WriteLine(Req);
                 if (controller == null) return;
                 try
