@@ -17,51 +17,67 @@ namespace PV_Client
         StreamWriter writer;
         public VLController()
         {
-            tcpClient = new TcpClient(IPAddress.IPv6Loopback.ToString(), 12345);
-            writer = new StreamWriter(tcpClient.GetStream());
-            writer.AutoFlush= true;
-            Volume = 256/2;
-            writer.WriteLine($"volume {Volume}");
+            try
+            {
+
+                tcpClient = new TcpClient(IPAddress.IPv6Loopback.ToString(), 12345);
+                writer = new StreamWriter(tcpClient.GetStream());
+                writer.AutoFlush = true;
+                Volume = 256 / 2;
+                writer.WriteLine($"volume {Volume}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+                Console.WriteLine("Failure while connecting to VLC");
+            }
         }
         public void GetCommand(VLCCommand cmd)
         {
-            switch (cmd)
+            try
             {
-                case VLCCommand.Play:
-                    Play();
-                    break;
-                case VLCCommand.VolumeDown:
-                    Volume = Volume - 26;
-                    if (Volume < 0)
-                    {
-                        Volume = 0;
-                    }
-                    else
-                    {
-                        writer.WriteLine($"volume {Volume}");
-                    }
-                    break;
-                case VLCCommand.VolumeUp:
-                    Volume = Volume + 26;
-                    if (Volume>512)
-                    {
-                        Volume = 512;
-                    }
-                    else
-                    {
+                switch (cmd)
+                {
+                    case VLCCommand.Play:
+                        Play();
+                        break;
+                    case VLCCommand.VolumeDown:
+                        Volume = Volume - 26;
+                        if (Volume < 0)
+                        {
+                            Volume = 0;
+                        }
+                        else
+                        {
+                            writer.WriteLine($"volume {Volume}");
+                        }
+                        break;
+                    case VLCCommand.VolumeUp:
+                        Volume = Volume + 26;
+                        if (Volume > 512)
+                        {
+                            Volume = 512;
+                        }
+                        else
+                        {
 
-                        writer.WriteLine($"volume {Volume}");
-                    }
-                    break;
-                case VLCCommand.Status:
-                    writer.WriteLine("status");
-                    break;
-                case VLCCommand.Quit:
-                    writer.WriteLine("quit");
-                    break;
+                            writer.WriteLine($"volume {Volume}");
+                        }
+                        break;
+                    case VLCCommand.Status:
+                        writer.WriteLine("status");
+                        break;
+                    case VLCCommand.Quit:
+                        writer.WriteLine("quit");
+                        break;
                     case VLCCommand.Mute:
-                    Mute();
-                    break;
+                        Mute();
+                        break;
+                }
+            }
+            catch
+            {
+                Console.WriteLine("OOOOOPPPPPS");
             }
         }
         public void ChangeMedia(string mediaUrl)
