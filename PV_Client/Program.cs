@@ -23,7 +23,7 @@ namespace PV_Client
         static Process VLC = null;
         static VLController controller = null;
         static string UUID = Guid.NewGuid().ToString();
-        
+        static int reqount;
         public static string[] localServers = [];
         async static Task Main(string[] args)
         {
@@ -104,25 +104,36 @@ namespace PV_Client
             listener.Start();
             while(state != ClientState.ShuttingDown)
             {
-                await GetInput(await listener.AcceptTcpClientAsync());
+                try
+                {
+                    var client = await listener.AcceptTcpClientAsync();
+                    _ = Task.Run(() => HandleClient(client));
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error accepting client: {ex.Message}");
+                }
             }
         }
-        static async Task GetInput(TcpClient client)
+        static async Task HandleClient(TcpClient client)
         {
+            var stream = client.GetStream();
             try
             {
-                
-                var stream = client.GetStream();
                 byte[] buffer = new byte[client.ReceiveBufferSize];
-
                 var sb = new StringBuilder();
 
-                int bytesRead;
-                do
+                while (client.Connected)
                 {
-                    bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+                    int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+                    if (bytesRead == 0)
+                    {
+                        // Client disconnected
+                        break;
+                    }
+
                     sb.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
-                    Console.WriteLine(sb.ToString());
+
                     if (sb.ToString().StartsWith("GET /description.xml"))
                     {
                         XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
@@ -131,33 +142,37 @@ namespace PV_Client
                         var s = sw.ToString();
                         byte[] ResponseBody = Encoding.UTF8.GetBytes(s);
                         StreamWriter writer = new StreamWriter(stream) { AutoFlush = true };
-                        string Header = "";
                         writer.WriteLine("HTTP/1.1 200 OK");
                         writer.WriteLine($"Content-Type: application/xml");
                         writer.WriteLine($"Content-Length: {ResponseBody.Length}");
                         writer.WriteLine();
                         writer.Flush();
-                        await stream.WriteAsync(ResponseBody,0,ResponseBody.Length);
-                        stream.Close();
-                        return;
+                        await stream.WriteAsync(ResponseBody, 0, ResponseBody.Length);
+                        sb.Clear(); // Clear the StringBuilder for the next request
                     }
-                } while (bytesRead == buffer.Length);
-                var Req = sb.ToString().Split("\r\n")[0].Trim();
-                Console.WriteLine(Req);
-                if (controller == null) return;
-                try
-                {
-                    controller.GetCommand(EnumTranslator<VLCCommand>.fromString(Req));
-                }
-                catch
-                {
-                    if (Req == "NextChan")
+                    else
                     {
-                        ChangeChannel(1);
-                    }
-                    else if (Req == "PrevChan")
-                    {
-                        ChangeChannel(-1);
+                        var Req = sb.ToString();
+                        Console.WriteLine(Req);
+                        if (controller != null)
+                        {
+                            try
+                            {
+                                controller.GetCommand(EnumTranslator<VLCCommand>.fromString(Req));
+                            }
+                            catch
+                            {
+                                if (Req == "NextChan")
+                                {
+                                    ChangeChannel(1);
+                                }
+                                else if (Req == "PrevChan")
+                                {
+                                    ChangeChannel(-1);
+                                }
+                            }
+                        }
+                        sb.Clear(); // Clear the StringBuilder for the next request
                     }
                 }
             }
@@ -165,7 +180,10 @@ namespace PV_Client
             {
                 Console.WriteLine(e.ToString());
             }
-            
+            finally
+            {
+                client.Close();
+            }
         }
         
         static void ChangeChannel(int mag)
