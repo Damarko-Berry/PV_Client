@@ -1,9 +1,12 @@
-﻿using PVLib;
+﻿using FFmpeg.AutoGen;
+using PVLib;
+using SDL2;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Xml;
@@ -20,13 +23,15 @@ namespace PV_Client
         static ChannelList ListOChans => LocalChannels + OtherChannels;
         static int CurrentChan = 0;
         static int port = 7896;
+        static bool paused = false;
         static Process VLC = null;
         static VLController controller = null;
         static string UUID = Guid.NewGuid().ToString();
-        static int reqount;
+        
         public static string[] localServers = [];
         async static Task Main(string[] args)
         {
+            
             Console.WriteLine("Searching for home server");
             //var oports = GetPorts();
             //port= oports[new Random().Next(oports.Length)];
@@ -43,6 +48,7 @@ namespace PV_Client
             {
                 File.Create("lS");
             }
+            RenderSLD();
 #pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
             Task.Run(ListenForSsdpRequests);
             Task.Run(SendSsdpAnnouncements);
@@ -50,41 +56,121 @@ namespace PV_Client
             #pragma warning restore CS4014
             ListenForController();
 
-            
             await CheckVLC();
         }
+        static unsafe void RenderSLD()
+        {
+            string url = @"C:\Users\marko\Videos\2025-04-12 02-12-52.mkv";
 
-        static int[] GetPorts()
-        {
-            List<int> openPorts = new List<int>(); 
-            for (int port = 1; port <= 65535; port++)
-            { 
-                if (IsPortOpen(port))
-                { openPorts.Add(port);
-                } 
+            ffmpeg.RootPath = @"FFmpeg"; // where your ffmpeg .dlls are
+
+            AVFormatContext* pFormatContext = ffmpeg.avformat_alloc_context();
+            if (ffmpeg.avformat_open_input(&pFormatContext, url, null, null) != 0)
+                throw new ApplicationException("Could not open file");
+
+            ffmpeg.avformat_find_stream_info(pFormatContext, null);
+
+            int videoStreamIndex = ffmpeg.av_find_best_stream(pFormatContext, AVMediaType.AVMEDIA_TYPE_VIDEO, -1, -1, null, 0);
+            if (videoStreamIndex < 0) throw new ApplicationException("No video stream");
+
+            AVStream* pStream = pFormatContext->streams[videoStreamIndex];
+            AVCodecParameters* codecpar = pStream->codecpar;
+            AVCodec* pCodec = ffmpeg.avcodec_find_decoder(codecpar->codec_id);
+            AVCodecContext* pCodecCtx = ffmpeg.avcodec_alloc_context3(pCodec);
+            ffmpeg.avcodec_parameters_to_context(pCodecCtx, codecpar);
+            ffmpeg.avcodec_open2(pCodecCtx, pCodec, null);
+
+            // --- FPS Extraction ---
+            double fps = 25.0; // Default fallback
+            if (pStream->avg_frame_rate.den != 0)
+                fps = ffmpeg.av_q2d(pStream->avg_frame_rate);
+            int frameDelayMs = (int)(1000.0 / fps);
+
+            // --- SDL Init ---
+            SDL2.SDL.SDL_Init(SDL2.SDL.SDL_INIT_VIDEO);
+            IntPtr window = SDL2.SDL.SDL_CreateWindow("FFmpeg + SDL2",
+                SDL2.SDL.SDL_WINDOWPOS_CENTERED, SDL2.SDL.SDL_WINDOWPOS_CENTERED,
+                pCodecCtx->width, pCodecCtx->height, SDL2.SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN);
+            IntPtr renderer = SDL2.SDL.SDL_CreateRenderer(window, -1, 0);
+            IntPtr texture = SDL2.SDL.SDL_CreateTexture(renderer,
+                SDL2.SDL.SDL_PIXELFORMAT_IYUV,
+                (int)SDL2.SDL.SDL_TextureAccess.SDL_TEXTUREACCESS_STREAMING,
+                pCodecCtx->width, pCodecCtx->height);
+
+            AVPacket* packet = ffmpeg.av_packet_alloc();
+            AVFrame* frame = ffmpeg.av_frame_alloc();
+
+            SDL2.SDL.SDL_Event e;
+            bool running = true;
+
+            var stopwatch = new Stopwatch();
+
+            while (running && ffmpeg.av_read_frame(pFormatContext, packet) >= 0)
+            {
+                if (packet->stream_index == videoStreamIndex)
+                {
+                    ffmpeg.avcodec_send_packet(pCodecCtx, packet);
+
+                    while (ffmpeg.avcodec_receive_frame(pCodecCtx, frame) == 0)
+                    {
+                        stopwatch.Restart();
+
+                        SDL2Native.SDL_UpdateYUVTexture(
+                            texture,
+                            IntPtr.Zero,
+                            (IntPtr)frame->data[0], frame->linesize[0],
+                            (IntPtr)frame->data[1], frame->linesize[1],
+                            (IntPtr)frame->data[2], frame->linesize[2]
+                        );
+
+                        SDL.SDL_RenderClear(renderer);
+                        SDL.SDL_RenderCopy(renderer, texture, IntPtr.Zero, IntPtr.Zero);
+                        SDL.SDL_RenderPresent(renderer);
+
+                        // Wait for the correct frame duration
+                        int elapsed = (int)stopwatch.ElapsedMilliseconds;
+                        int delay = frameDelayMs - elapsed;
+                        if (delay > 0)
+                            Thread.Sleep(delay);
+                    }
+                }
+
+                ffmpeg.av_packet_unref(packet);
+
+                while (SDL2.SDL.SDL_PollEvent(out e) == 1)
+                {
+                    if (e.type == SDL2.SDL.SDL_EventType.SDL_QUIT)
+                        running = false;
+                }
+                if (paused)
+                {
+                    Thread.Sleep(10); // Idle a bit
+                    continue;
+                }
+
+
             }
-            return openPorts.ToArray();
-        }
-        static bool IsPortOpen(int port)
-        {
-            bool isOpen = false;
-            try 
-            { 
-                TcpConnectionInformation[] tcpConnections = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpConnections(); 
-                foreach (var tcpConnection in tcpConnections) 
-                { 
-                    if (tcpConnection.LocalEndPoint.Port == port)
-                    { 
-                        isOpen = true; 
-                        break; 
-                    } 
-                } 
+
+            // Cleanup
+            ffmpeg.av_frame_free(&frame);
+            ffmpeg.av_packet_free(&packet);
+            ffmpeg.avcodec_free_context(&pCodecCtx);
+            ffmpeg.avformat_close_input(&pFormatContext);
+
+            SDL2.SDL.SDL_DestroyTexture(texture);
+            SDL2.SDL.SDL_DestroyRenderer(renderer);
+            SDL2.SDL.SDL_DestroyWindow(window);
+            SDL2.SDL.SDL_Quit();
+
+            void Seek(AVFormatContext* fmtCtx, AVCodecContext* codecCtx, int streamIndex, long offsetSeconds)
+            {
+                long timestamp = (long)(offsetSeconds * ffmpeg.AV_TIME_BASE);
+                ffmpeg.av_seek_frame(fmtCtx, -1, timestamp, ffmpeg.AVSEEK_FLAG_BACKWARD);
+
+                ffmpeg.avcodec_flush_buffers(codecCtx);
             }
-            catch (Exception)
-            { 
-            } 
-            return isOpen; 
         }
+       
         static async Task CheckVLC(){
             while (VLC == null)
             {
@@ -371,5 +457,17 @@ ST: {SSDPTemplates.ServerSchema}";
             }
             Play(ListOChans[0].Link);
         }
+    }
+
+    public static class SDL2Native
+    {
+        [DllImport("SDL2.dll", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int SDL_UpdateYUVTexture(
+            IntPtr texture,
+            IntPtr rect,
+            IntPtr yPlane, int yPitch,
+            IntPtr uPlane, int uPitch,
+            IntPtr vPlane, int vPitch
+        );
     }
 }
