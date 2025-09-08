@@ -21,18 +21,44 @@ namespace PV_Client
         private uint audioDevice;
         private IntPtr font;
 
-        public SDLPlayer(int w, int h, string url = @"https://www.w3schools.com/html/mov_bbb.mp4")
+        public SDLPlayer(ScreenMode screen, string url = @"https://www.w3schools.com/html/mov_bbb.mp4")
         {
-            Width = w;
-            Height = h;
             this.Source = url;
 
             SDL2.SDL.SDL_Init(SDL2.SDL.SDL_INIT_VIDEO | SDL2.SDL.SDL_INIT_AUDIO);
+            if (SDL.SDL_Init(SDL.SDL_INIT_VIDEO) < 0)
+            {
+                Console.WriteLine("SDL could not initialize! Error: " + SDL.SDL_GetError());
+                return;
+            }
 
+            // Query the primary display (index 0)
+            if (SDL.SDL_GetCurrentDisplayMode(0, out SDL.SDL_DisplayMode mode) != 0)
+            {
+                Console.WriteLine("SDL_GetCurrentDisplayMode failed: " + SDL.SDL_GetError());
+            }
+            else
+            {
+                Console.WriteLine($"Screen size: {mode.w}x{mode.h}");
+            }
+            SDL.SDL_WindowFlags flags = SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN;
+            switch (screen)
+            {
+                case ScreenMode.Fullscreen:
+                    Width = mode.w;
+                    Height = mode.h;
+                    flags = SDL.SDL_WindowFlags.SDL_WINDOW_FULLSCREEN;
+                    break;
+                case ScreenMode.Small:
+                    Width = 1280;
+                    Height = 720;
+                    flags = SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN;
+                    break;
+            }
             window = SDL2.SDL.SDL_CreateWindow("FFmpeg + SDL2",
                 SDL2.SDL.SDL_WINDOWPOS_CENTERED, SDL2.SDL.SDL_WINDOWPOS_CENTERED,
                 Width, Height,
-                SDL2.SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN| SDL.SDL_WindowFlags.SDL_WINDOW_RESIZABLE);
+                SDL2.SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN| flags);
 
             renderer = SDL2.SDL.SDL_CreateRenderer(window, -1, 0);
             int TFF = TTF_Init();
@@ -52,6 +78,7 @@ namespace PV_Client
         public unsafe async Task Play()
         {
             ffmpeg.RootPath = @"FFmpeg";
+            
         Top:
             // Open format context
             fmtCtx = ffmpeg.avformat_alloc_context();
@@ -386,6 +413,7 @@ namespace PV_Client
             SDL2.SDL.SDL_DestroyRenderer(renderer);
             SDL2.SDL.SDL_DestroyWindow(window);
             SDL2.SDL.SDL_Quit();
+
             TTF_CloseFont(font);
             TTF_Quit();
         }

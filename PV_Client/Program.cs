@@ -36,11 +36,26 @@ namespace PV_Client
         {
             //var oports = GetPorts();
             //port= oports[new Random().Next(oports.Length)];
+            if (SDL.SDL_Init(SDL.SDL_INIT_VIDEO) < 0)
+            {
+                Console.WriteLine("SDL could not initialize! Error: " + SDL.SDL_GetError());
+                return;
+            }
+
+            // Query the primary display (index 0)
+            if (SDL.SDL_GetCurrentDisplayMode(0, out SDL.SDL_DisplayMode mode) != 0)
+            {
+                Console.WriteLine("SDL_GetCurrentDisplayMode failed: " + SDL.SDL_GetError());
+            }
+            else
+            {
+                Console.WriteLine($"Screen size: {mode.w}x{mode.h}");
+            }
 #if DEBUG
-            Player = new SDLPlayer(1920, 1040, @"C:\Users\marko\Videos\Young Justice (2010)\Season 1\Young Justice - S01E01 - Independence Day (1080p x265 EDGE2020).mkv");
+            Player = new SDLPlayer( ScreenMode.Small, @"C:\Users\marko\Videos\Young Justice (2010)\Season 1\Young Justice - S01E01 - Independence Day (1080p x265 EDGE2020).mkv");
 #else
             
-            Player = new SDLPlayer(1920, 1080, @"C:\Users\marko\Videos\Young Justice (2010)\Season 1\Young Justice - S01E01 - Independence Day (1080p x265 EDGE2020).mkv");
+            Player = new SDLPlayer(mode.w, mode.h, @"C:\Users\marko\Videos\Young Justice (2010)\Season 1\Young Justice - S01E01 - Independence Day (1080p x265 EDGE2020).mkv");
 #endif
             Console.WriteLine("Searching for home server");
             if (File.Exists("lS"))

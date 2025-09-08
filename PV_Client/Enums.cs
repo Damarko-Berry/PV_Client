@@ -31,6 +31,12 @@ namespace PV_Client
         CONNECT
     }
 
+    public enum ScreenMode
+    {
+        Fullscreen,
+        Small
+    }
+
     public static class Enums<T>
     {
         public static T ParseEnum(string value)
