@@ -1,6 +1,7 @@
 ﻿using FFmpeg.AutoGen;
 using PVLib;
 using SDL2;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -17,25 +18,31 @@ namespace PV_Client
 {
     internal class Program
     {
-        static ClientState state;
+        static ClientState state = ClientState.Loading;
         static ChannelList LocalChannels = new ChannelList();
         static ChannelList OtherChannels = new ChannelList();
         static ChannelList ListOChans => LocalChannels + OtherChannels;
         static int CurrentChan = 0;
+        static string CurrentlyPLaying => ListOChans[CurrentChan].Link;
         static int port = 7896;
         static bool paused = false;
         static Process VLC = null;
-        static VLController controller = null;
+        public static SDLPlayer Player = null;
         static string UUID = Guid.NewGuid().ToString();
+
         
-        public static string[] localServers = [];
+        public static string[] localServers = new string[] {};
         async static Task Main(string[] args)
         {
-            
-            Console.WriteLine("Searching for home server");
             //var oports = GetPorts();
             //port= oports[new Random().Next(oports.Length)];
-            state = ClientState.Loading;
+#if DEBUG
+            Player = new SDLPlayer(1920, 1040, @"C:\Users\marko\Videos\Young Justice (2010)\Season 1\Young Justice - S01E01 - Independence Day (1080p x265 EDGE2020).mkv");
+#else
+            
+            Player = new SDLPlayer(1920, 1080, @"C:\Users\marko\Videos\Young Justice (2010)\Season 1\Young Justice - S01E01 - Independence Day (1080p x265 EDGE2020).mkv");
+#endif
+            Console.WriteLine("Searching for home server");
             if (File.Exists("lS"))
             {
                 localServers = File.ReadAllLines("lS");
@@ -48,142 +55,22 @@ namespace PV_Client
             {
                 File.Create("lS");
             }
-            RenderSLD();
 #pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+            Player.Play();
             Task.Run(ListenForSsdpRequests);
             Task.Run(SendSsdpAnnouncements);
             Start();
-            #pragma warning restore CS4014
+#pragma warning restore CS4014
             ListenForController();
 
-            await CheckVLC();
-        }
-        static unsafe void RenderSLD()
-        {
-            string url = @"C:\Users\marko\Videos\2025-04-12 02-12-52.mkv";
-
-            ffmpeg.RootPath = @"FFmpeg"; // where your ffmpeg .dlls are
-
-            AVFormatContext* pFormatContext = ffmpeg.avformat_alloc_context();
-            if (ffmpeg.avformat_open_input(&pFormatContext, url, null, null) != 0)
-                throw new ApplicationException("Could not open file");
-
-            ffmpeg.avformat_find_stream_info(pFormatContext, null);
-
-            int videoStreamIndex = ffmpeg.av_find_best_stream(pFormatContext, AVMediaType.AVMEDIA_TYPE_VIDEO, -1, -1, null, 0);
-            if (videoStreamIndex < 0) throw new ApplicationException("No video stream");
-
-            AVStream* pStream = pFormatContext->streams[videoStreamIndex];
-            AVCodecParameters* codecpar = pStream->codecpar;
-            AVCodec* pCodec = ffmpeg.avcodec_find_decoder(codecpar->codec_id);
-            AVCodecContext* pCodecCtx = ffmpeg.avcodec_alloc_context3(pCodec);
-            ffmpeg.avcodec_parameters_to_context(pCodecCtx, codecpar);
-            ffmpeg.avcodec_open2(pCodecCtx, pCodec, null);
-
-            // --- FPS Extraction ---
-            double fps = 25.0; // Default fallback
-            if (pStream->avg_frame_rate.den != 0)
-                fps = ffmpeg.av_q2d(pStream->avg_frame_rate);
-            int frameDelayMs = (int)(1000.0 / fps);
-
-            // --- SDL Init ---
-            SDL2.SDL.SDL_Init(SDL2.SDL.SDL_INIT_VIDEO);
-            IntPtr window = SDL2.SDL.SDL_CreateWindow("FFmpeg + SDL2",
-                SDL2.SDL.SDL_WINDOWPOS_CENTERED, SDL2.SDL.SDL_WINDOWPOS_CENTERED,
-                pCodecCtx->width, pCodecCtx->height, SDL2.SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN);
-            IntPtr renderer = SDL2.SDL.SDL_CreateRenderer(window, -1, 0);
-            IntPtr texture = SDL2.SDL.SDL_CreateTexture(renderer,
-                SDL2.SDL.SDL_PIXELFORMAT_IYUV,
-                (int)SDL2.SDL.SDL_TextureAccess.SDL_TEXTUREACCESS_STREAMING,
-                pCodecCtx->width, pCodecCtx->height);
-
-            AVPacket* packet = ffmpeg.av_packet_alloc();
-            AVFrame* frame = ffmpeg.av_frame_alloc();
-
-            SDL2.SDL.SDL_Event e;
-            bool running = true;
-
-            var stopwatch = new Stopwatch();
-
-            while (running && ffmpeg.av_read_frame(pFormatContext, packet) >= 0)
+            while (Player.Open)
             {
-                if (packet->stream_index == videoStreamIndex)
-                {
-                    ffmpeg.avcodec_send_packet(pCodecCtx, packet);
-
-                    while (ffmpeg.avcodec_receive_frame(pCodecCtx, frame) == 0)
-                    {
-                        stopwatch.Restart();
-
-                        SDL2Native.SDL_UpdateYUVTexture(
-                            texture,
-                            IntPtr.Zero,
-                            (IntPtr)frame->data[0], frame->linesize[0],
-                            (IntPtr)frame->data[1], frame->linesize[1],
-                            (IntPtr)frame->data[2], frame->linesize[2]
-                        );
-
-                        SDL.SDL_RenderClear(renderer);
-                        SDL.SDL_RenderCopy(renderer, texture, IntPtr.Zero, IntPtr.Zero);
-                        SDL.SDL_RenderPresent(renderer);
-
-                        // Wait for the correct frame duration
-                        int elapsed = (int)stopwatch.ElapsedMilliseconds;
-                        int delay = frameDelayMs - elapsed;
-                        if (delay > 0)
-                            Thread.Sleep(delay);
-                    }
-                }
-
-                ffmpeg.av_packet_unref(packet);
-
-                while (SDL2.SDL.SDL_PollEvent(out e) == 1)
-                {
-                    if (e.type == SDL2.SDL.SDL_EventType.SDL_QUIT)
-                        running = false;
-                }
-                if (paused)
-                {
-                    Thread.Sleep(10); // Idle a bit
-                    continue;
-                }
-
-
-            }
-
-            // Cleanup
-            ffmpeg.av_frame_free(&frame);
-            ffmpeg.av_packet_free(&packet);
-            ffmpeg.avcodec_free_context(&pCodecCtx);
-            ffmpeg.avformat_close_input(&pFormatContext);
-
-            SDL2.SDL.SDL_DestroyTexture(texture);
-            SDL2.SDL.SDL_DestroyRenderer(renderer);
-            SDL2.SDL.SDL_DestroyWindow(window);
-            SDL2.SDL.SDL_Quit();
-
-            void Seek(AVFormatContext* fmtCtx, AVCodecContext* codecCtx, int streamIndex, long offsetSeconds)
-            {
-                long timestamp = (long)(offsetSeconds * ffmpeg.AV_TIME_BASE);
-                ffmpeg.av_seek_frame(fmtCtx, -1, timestamp, ffmpeg.AVSEEK_FLAG_BACKWARD);
-
-                ffmpeg.avcodec_flush_buffers(codecCtx);
+                Thread.Sleep(1000);
             }
         }
+        
        
-        static async Task CheckVLC(){
-            while (VLC == null)
-            {
-
-            }
-            await Task.Delay(10*1000);
-            controller = new();
-            while (!VLC.HasExited & state == ClientState.Watching){
-                await Task.Delay(1000*15);
-            }
-            state = ClientState.ShuttingDown;
-            await Task.Delay(5000);
-        }
+        
         static async void ListenForController()
         {
             TcpListener listener = new TcpListener(IPAddress.Any, port);
@@ -208,6 +95,7 @@ namespace PV_Client
             {
                 byte[] buffer = new byte[client.ReceiveBufferSize];
                 var sb = new StringBuilder();
+                
 
                 while (client.Connected)
                 {
@@ -219,12 +107,20 @@ namespace PV_Client
                     }
 
                     sb.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
-
-                    if (sb.ToString().StartsWith("GET /description.xml"))
+                    HttpRequest request = new HttpRequest(sb.ToString());
+                    sb.Clear(); // Clear the StringBuilder for the next request
+                    if (request.Method == HTTPMethod.GET)
                     {
-                        XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
                         StringWriter sw = new StringWriter();
-                        xmlSerializer.Serialize(sw, ListOChans);
+                        if (request.Path.Contains("description.xml"))
+                        {
+                            XmlSerializer xmlSerializer = new XmlSerializer(typeof(ChannelList));
+                            xmlSerializer.Serialize(sw, ListOChans);
+                        }
+                        else if(request.Path.Contains("Schedule"))
+                        {
+                            sw.WriteLine("<html><body><h1>PV Client</h1><p>This is a simple HTTP server running in a C# application.</p></body></html>");
+                        }
                         var s = sw.ToString();
                         byte[] ResponseBody = Encoding.UTF8.GetBytes(s);
                         StreamWriter writer = new StreamWriter(stream) { AutoFlush = true };
@@ -234,30 +130,38 @@ namespace PV_Client
                         writer.WriteLine();
                         writer.Flush();
                         await stream.WriteAsync(ResponseBody, 0, ResponseBody.Length);
-                        sb.Clear(); // Clear the StringBuilder for the next request
+                        
                     }
-                    else
+                    else if (request.Method == HTTPMethod.POST)
                     {
-                        var Req = sb.ToString().Trim();
-                        Console.WriteLine(Req);
-                        if (controller != null)
+                        if(request.Path.Contains("PLay"))
                         {
-                            try
-                            {
-                                controller.GetCommand(EnumTranslator<VLCCommand>.fromString(Req));
-                            }
-                            catch
-                            {
-                                if (Req == "NextChan")
-                                {
-                                    ChangeChannel(1);
-                                }
-                                else if (Req == "PrevChan")
-                                {
-                                    ChangeChannel(-1);
-                                }
-                            }
+                            paused = !paused;
                         }
+                        else if(request.Path.Contains("ChangeChannel"))
+                        {
+                            if (request.Body.Contains("Up"))
+                            {
+                                ChangeChannel(1);
+                            }
+                            else if (request.Body.Contains("Down"))
+                            {
+                                ChangeChannel(-1);
+                            }
+                            Player.SetSource(ListOChans[CurrentChan].Link);
+                        }
+
+                        StreamWriter sw = new StreamWriter(stream) { AutoFlush = true };
+                        sw.WriteLine("HTTP/1.1 200 OK");
+                        sw.WriteLine($"Content-Type: text/plain");
+                        sw.WriteLine($"Content-Length: 2");
+                        sw.WriteLine();
+                        sw.WriteLine("OK");
+                        var s = sw.ToString();
+                        byte[] ResponseBody = Encoding.UTF8.GetBytes(s);
+                        sw.Flush();
+                        await stream.WriteAsync(ResponseBody, 0, ResponseBody.Length);
+                        
                         sb.Clear(); // Clear the StringBuilder for the next request
                     }
                 }
@@ -278,7 +182,7 @@ namespace PV_Client
             CurrentChan += mag;
             if (CurrentChan < 0) CurrentChan = ListOChans.length - 1;
             if (CurrentChan >= ListOChans.length) CurrentChan = 0;
-            controller.ChangeMedia(ListOChans[CurrentChan].Link);
+            Player.SetSource(CurrentlyPLaying);
         }
         static async Task ParseLocalServer(string localServer)
         {
@@ -415,39 +319,7 @@ ST: {SSDPTemplates.ServerSchema}";
             }
             throw new Exception("Local IP Address Not Found!");
         }
-        static void Play(string ChannelName)
-        {
-            if (state == ClientState.Watching)
-            {
-                try
-                {
-                    VLC.Kill();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.ToString());
-                }
-            }
-            state = ClientState.Watching;
-            string command = $"-f -L {ChannelName} --extraintf rc --rc-host=localhost:12345";
-            var escapedArgs = command.Replace("\"", "\\\"");
-
-            VLC = new Process()
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "/usr/bin/vlc",
-                    Arguments = $"{escapedArgs}",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                },
-            };
-            VLC.Start();
-            VLC.BeginOutputReadLine();
-            VLC.BeginErrorReadLine();
-        }
+        
         public static async void Start()
         {
             while(ListOChans.length < 1)
@@ -455,19 +327,10 @@ ST: {SSDPTemplates.ServerSchema}";
                 state = ClientState.Searching;
                 await Task.Delay(1000);
             }
-            Play(ListOChans[0].Link);
+            Player.SetSource(ListOChans[0].Link);
         }
+
     }
 
-    public static class SDL2Native
-    {
-        [DllImport("SDL2.dll", CallingConvention = CallingConvention.Cdecl)]
-        public static extern int SDL_UpdateYUVTexture(
-            IntPtr texture,
-            IntPtr rect,
-            IntPtr yPlane, int yPitch,
-            IntPtr uPlane, int uPitch,
-            IntPtr vPlane, int vPitch
-        );
-    }
+    
 }

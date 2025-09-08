@@ -18,6 +18,7 @@
     <None Remove="FFmpeg\swresample-5.dll" />
     <None Remove="FFmpeg\swscale-8.dll" />
     <None Remove="SDL2.dll" />
+    <None Remove="SDL2_ttf.dll" />
   </ItemGroup>
 
   <ItemGroup>
@@ -58,6 +59,9 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="SDL2.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="SDL2_ttf.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
