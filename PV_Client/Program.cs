@@ -52,10 +52,10 @@ namespace PV_Client
                 Console.WriteLine($"Screen size: {mode.w}x{mode.h}");
             }
 #if DEBUG
-            Player = new SDLPlayer( ScreenMode.Small, @"C:\Users\marko\Videos\Young Justice (2010)\Season 1\Young Justice - S01E01 - Independence Day (1080p x265 EDGE2020).mkv");
+            Player = new SDLPlayer( ScreenMode.Small);
 #else
             
-            Player = new SDLPlayer(mode.w, mode.h, @"C:\Users\marko\Videos\Young Justice (2010)\Season 1\Young Justice - S01E01 - Independence Day (1080p x265 EDGE2020).mkv");
+            Player = new SDLPlayer(ScreenMode.Fullscreen, @"C:\Users\marko\Videos\Young Justice (2010)\Season 1\Young Justice - S01E01 - Independence Day (1080p x265 EDGE2020).mkv");
 #endif
             Console.WriteLine("Searching for home server");
             if (File.Exists("lS"))
